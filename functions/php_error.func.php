@@ -1,14 +1,21 @@
 <?php
 
-function print_error_container($mode, $error, $trace){
+function print_error_container($error, $trace){
 	$div = "<div style='margin:10px;padding:20px;background-color:#f0f0f0;color:#1e1e1e;display:inline-block;border-radius:5px;font-family:\"Helvetica\", sans-serif;border:20px solid #ccc;position:relative;'>";
 		$div .= "<h2>Whoops! Looks like an error.</h2>";
 		$div .= "<p style='font-size:1.5em'>" . $error . "</p>";
-		$div .= "<h3>Stack trace:</h3>";
-		$div .= "<div style='position:absolute;top:10px;right:10px;color:blue'><strong>" . $mode . "</strong> mode</div>";
+		$div .= "<h3>Details:</h3>";
+		$div .= "<div style='position:absolute;top:10px;right:10px;color:blue'><strong>" . ARGOS_ENV . "</strong> mode</div>";
 		$div .= "<pre>" . $trace . "</pre>";
 	$div .= "</div>";
 	echo $div;
+}
+
+function argos_error($message){
+	$bt = debug_backtrace();
+  	$caller = array_shift($bt);
+  	$trace = "Execution stopped by Argos on line " . $caller['line'] . " of " . $caller['file'];
+	print_error_container($message, $trace);
 }
 
 function script_error($num, $str, $file, $line) {
@@ -19,7 +26,7 @@ function script_error($num, $str, $file, $line) {
 	
 	if(ARGOS_ENV=="development"){
 			$e = new Exception;
-			print_error_container(ARGOS_ENV, $error, $e->getTraceAsString());
+			print_error_container($error, $e->getTraceAsString());
 	}
     else{
 		error_log($error, 3, ERROR_LOG_PATH);
@@ -34,7 +41,7 @@ function shutdown_error() {
 		
 		if(ARGOS_ENV=="development"){
 			$trace = "None, on line <strong>" . $error['line'] . "</strong> of " . $error['file'];
-			print_error_container(ARGOS_ENV, $error['message'], $trace);
+			print_error_container($error['message'], $trace);
 		}
 	    else{
 			error_log("PRODUCTION ERROR:" . $error['message'] . "on line" . $error['line'] .

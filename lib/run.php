@@ -10,6 +10,7 @@
 
     // configure the application
     include_once BASE . 'config/settings.php';
+    include_once BASE . 'config/properties.php';
 
     // route incoming URLs
     include_once BASE . 'config/router.php';

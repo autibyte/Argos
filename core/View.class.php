@@ -1,14 +1,19 @@
 <?php
 class View{
 
+	public $app;
+
 	private $_path;
 	private $_ivars = array();
 
-	function __construct($name, $ivars=false){
-		$this->_path = BASE . "app/views/" . $name . ".html.php";
+	function __construct($name, $ivars=false, $controller=false){
+
+		$this->_path = self::file_location($name, $controller);
+
 		if($ivars!=false){
 			$this->_ivars = $ivars;
 		}
+
 	}
 
 	public function render($layout=false){
@@ -18,6 +23,8 @@ class View{
 		foreach($this->_ivars as $var => $value){
 			$$var = $value;
 		}
+
+		$app = $this->app;
 
 		if(!file_exists($this->_path)){
 				trigger_error("Couldn't show view, file '" . $this->_path . "' did not exist.");
@@ -39,6 +46,13 @@ class View{
 
 	public function yield(){
 		$this->render();
+	}
+
+	public static function file_location($name, $controller){
+		$location = BASE . "app/views/";
+		if($controller!=false)
+			$location .= $controller . "/";
+		return $location . ucfirst($name) . ".html.php";
 	}
 }
 ?>

@@ -3,10 +3,12 @@
 class App{
 
     public $settings;
+    public $properties;
 
 	function __construct(){
 		$strings = new Strings("en_us");
         $settings = array();
+        $properties = array();
 	}
 
     public function save_settings($new_settings){
@@ -45,12 +47,20 @@ class App{
             }
         }
 
+        if(array_key_exists('default_layout', $new_settings))
+            define("ARGOS_DEFAULT_LAYOUT", $new_settings['default_layout']);
+
         $this->settings = $new_settings;
     }
 
     public function setting($setting_name){
         $settings = $this->settings;
         return $settings[$setting_name];
+    }
+
+    public function property($property_name){
+        $properties = $this->properties;
+        return $properties[$property_name];
     }
 
 }

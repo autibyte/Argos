@@ -2,40 +2,32 @@
 	class Router{
 
 		var $request;
-		var $layout;
-		var $type = false;
-		var $controller = false;
-		var $controller_method = "init";
-		var $remaps = array();
-		var $redirect;
-		var $include_file = "";
 
-		function __construct($layout){
+		/**
+		 * the type of request
+		 */
+		var $type;
+		const TYPE_CONTROLLER_METHOD = 0;
+		const TYPE_VIEW = 1;
+
+		/**
+		 * for controller/method requests
+		 */
+		var $method;
+
+		// whether or not a route was found
+		var $found_route;
+
+		function __construct(){
+			// set the request to be the variable from .htaccess
 			$this->request = gets("page_request") ? getv("page_request") : "";
-			$this->layout = $layout;
+			// remove slash from request
 			$this->request = (starts_with("/", $this->request)) ? substr($this->request, 1) : $this->request;
-
-			define("PAGE_REQUEST", $this->request("first"));
-			define("MODULE_REQUEST", $this->request("second"));
-			define("ADDITION_REQUEST", $this->request("rest"));
-			define("LAYOUT", $this->layout);
 		}
 
-		public function request($type=false){
-			if(!$type) return $this->request;
-			if(var_contains_string("/", $this->request)){
-				$page_requests = explode("/", $this->request);
-				if($type=="first") return $page_requests[0];
-				if($type=="second") return $page_requests[1];
-				if(count($page_requests)>2){
-					if($type=="rest") return str_replace($page_requests[0] . "/" . $page_requests[1], "", implode($page_requests));
-				}
-			}
-			else{
-				if($type=="first") return $this->request;
-			}
-		}
-
+		/**
+		 * Whether or not the current request matches the given route
+		 */
 		public function has($route){
 			if(starts_with($route,$this->request)) return true;
 			if(starts_with($route, "/" . $this->request)) return true;
@@ -43,84 +35,83 @@
 			return false;
 		}
 
-		public function strip_slashes($route){
-			$string = (starts_with("/", $route)) ? substr($route, 1) : $route;
-			$string = (ends_with("/", $string)) ? substr_replace($string, "", -1) : $string;
-			return $string;
-		}
-
-		public function map($route, $controller){
-			if($this->has($route)){
-				$this->include_file = BASE . "app/controllers/" . ucwords($controller) . ".php";
-				include_once($this->include_file);
-				$controller = ucwords($controller) . "Controller";
-				$this->controller = new $controller();
-				$method_request = $this->strip_slashes(str_replace($route, "", $this->request));
-				$controller_method = ($method_request=="") ? "index" : $method_request;
-				if(method_exists($this->controller, $controller_method)){
-					$this->controller_method = $controller_method;
-				}
-				else{
-					$this->controller_method = false;
-				}
+		/**
+		 * map a route to a method of a controller (e.x. controller#method)
+		 */
+		public function map($route, $method){
+			if($this->has($route)&&!$this->found_route){
+				$this->found_route = true;
+				$this->type = self::TYPE_CONTROLLER_METHOD;
+				$this->method = $method;
 			}
 		}
 
-		public function map_view($route, $view){
-			if($this->has($route)){
-				$this->type = "view";
-				$this->include_file = BASE . "app/views/" . $view . ".html.php";
-			}
+		/**
+		 * map() only when there is a post request
+		 */
+		public function map_post($route, $method){
+			if(REQUEST_METHOD=="POST")
+				$this->map($route, method);
 		}
 
-		public function map_standalone($route, $filepath){
-			if($this->has($route)){
-				$this->type = "view";
-				$this->include_file = BASE . $filepath;
-			}
+		/**
+		 * map a route base (e.x. / or admin/) to a controller, while
+		 * specifiying route-method pairs in an array
+		 * (with_index denotes whether / is automatically mapped to an 'index' method)
+		 */
+		public function map_controller($controller, $route_base, $route_method_pairs, $with_index=true){
+			foreach($route_method_pairs as $route => $method)
+				$this->map($route_base . $route, $controller . "#" . $method);
+			if($with_index)
+				$this->map($route_base, $controller . "#index");
 		}
 
-		public function remap($from, $to){
-			if($this->has($from)){
-				$this->request = $to;
-				$this->remaps[] = $from;
-			}
-		}
-
-		public function remaps($route){
-			return in_array($route, $this->remaps);
-		}
-
-		public function redirect($route, $to, $same_domain=true){
-			if($this->has($route)){
-				$location = ($same_domain) ? BASE_URL . $to : $to;
-				header("Location: ". $location);
-			}
-		}
-
+		/**
+		 * called when routing is complete
+		 */
 		public function finished_routing($app_instance){
+			if(!$this->found_route){
+				argos_error("No route defined for '/" . $this->request .  "'.");
+			}
+			else if ($this->type==self::TYPE_CONTROLLER_METHOD){
+				// identify the controller and method
+				$controller_method = explode("#", $this->method);
+				$controller = $controller_method[0];
+				$controller_proper = ucwords($controller);
+				$controller_class_name = Controller::class_name($controller);
+				$method = $controller_method[1];
 
-			if(empty($this->include_file)){
-				trigger_error("No route defined for '/" . $this->request .  "'.");
-			}
-			else if(!file_exists($this->include_file)){
-				die("Router include file '" . $this->include_file . "' not found!");
-			}
-			else{
-				if($this->controller_method==false||$this->type=="view"){
-					if($this->controller_method=="init"){
-						include_once($this->include_file);
+				// verify the correct controller exists
+				if(!file_exists(Controller::file_location($controller)))
+					argos_error("The controller file " . $controller_proper . ".php does not exist!");
+
+				// include the controller file and verify the class exists
+				include_once Controller::file_location($controller);
+				if(!class_exists($controller_class_name))
+					argos_error("The controller class " . $controller_proper  . " is not declared yet!");
+
+				// instantiate the controller and verify that the method exists 
+				$this_controller = new $controller_class_name;
+				$this_controller->app = $app_instance;
+
+				if(!method_exists($this_controller, $method)){
+					// if the method doesn't exist, attempt to locate an ivar-less view
+					if(file_exists(View::file_location($method, $controller))){
+						$this_view = new View($method, false, strtolower($controller));
+						$this_view->app = $app_instance;
+						$this_view->render($this_controller->_layout);
 					}
 					else{
-						trigger_error("Can't load view, method '" . $this->request . "' in " . $this->controller->_name . "Controller doesn't exist!");
+						argos_error("'" . $method . "' is not a method for the " . $controller_proper . " controller, nor is there"
+								. " a view called '" . $method . "' in app/views/" . $controller . "/.", E_USER_ERROR);
 					}
 				}
 				else{
-					$controller_method = $this->controller_method;
-					$this->controller->$controller_method();
+					// call the method
+					$this_controller->$method();
 				}
+				
 			}
-		
 		}
 
 	}
